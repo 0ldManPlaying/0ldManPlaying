@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Playback Scrubber Visual</title>
+  <style>
+    body { margin:0; font-family: Inter, Arial, sans-serif; background:#f3f4f6; }
+    .frame { width: 960px; margin: 40px auto; background: white; border-radius: 16px; padding: 20px; box-shadow: 0 12px 40px rgba(0,0,0,.12); }
+    .header { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; }
+    .title { font-size:28px; font-weight:700; }
+    .controls { display:flex; gap:10px; }
+    .btn { min-width:90px; height:42px; border-radius:10px; background:#1f2937; color:#fff; display:flex; align-items:center; justify-content:center; font-weight:600; }
+    .timeline { position:relative; background:#111827; border-radius:14px; height:120px; overflow:hidden; }
+    .track { position:absolute; left:14px; right:14px; top:52px; height:14px; border-radius:7px; background:#374151; overflow:hidden; }
+    .recording { position:absolute; top:0; bottom:0; background:#2563eb; }
+    .buffered { position:absolute; top:0; bottom:0; background:#93c5fd; opacity:.65; }
+    .tick { position:absolute; width:2px; bottom:-11px; border-radius:2px; }
+    .playhead-line { position:absolute; top:14px; bottom:20px; width:2px; background:#f9fafb; left:56%; }
+    .playhead-handle { position:absolute; width:18px; height:18px; border-radius:999px; background:#f9fafb; left:calc(56% - 8px); top:88px; }
+    .tooltip { position:absolute; top:10px; left:0; right:0; text-align:center; color:#fff; font-weight:700; }
+    .subtitle { color:#d1d5db; font-size:12px; margin-top:3px; }
+    .footer { margin-top:12px; display:flex; justify-content:space-between; color:#374151; font-size:12px; }
+    .legend { margin-top:14px; display:flex; gap:16px; font-size:13px; color:#111827; }
+    .dot { width:10px; height:10px; border-radius:50%; display:inline-block; margin-right:6px; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <div class="header">
+      <div class="title">CCTV Playback Scrubber</div>
+      <div class="controls">
+        <div class="btn">Prev</div>
+        <div class="btn">Next</div>
+      </div>
+    </div>
+
+    <div class="timeline">
+      <div class="tooltip">18:42:16<div class="subtitle">thumbnail preview (optioneel)</div></div>
+      <div class="track">
+        <div class="recording" style="left:2%;width:24%"></div>
+        <div class="recording" style="left:33%;width:30%"></div>
+        <div class="recording" style="left:67%;width:30%"></div>
+
+        <div class="buffered" style="left:54%;width:10%"></div>
+
+        <div class="tick" style="left:7%;height:11px;background:#f59e0b"></div>
+        <div class="tick" style="left:14%;height:14px;background:#8b5cf6"></div>
+        <div class="tick" style="left:24%;height:12px;background:#10b981"></div>
+        <div class="tick" style="left:41%;height:16px;background:#ef4444"></div>
+        <div class="tick" style="left:58%;height:13px;background:#3b82f6"></div>
+        <div class="tick" style="left:69%;height:11px;background:#f59e0b"></div>
+        <div class="tick" style="left:82%;height:15px;background:#8b5cf6"></div>
+      </div>
+      <div class="playhead-line"></div>
+      <div class="playhead-handle"></div>
+    </div>
+
+    <div class="footer">
+      <div>00:00:00</div>
+      <div>18:42:16</div>
+      <div>23:59:59</div>
+    </div>
+
+    <div class="legend">
+      <span><i class="dot" style="background:#f59e0b"></i>motion</span>
+      <span><i class="dot" style="background:#8b5cf6"></i>ai</span>
+      <span><i class="dot" style="background:#10b981"></i>audio</span>
+      <span><i class="dot" style="background:#ef4444"></i>tamper</span>
+      <span><i class="dot" style="background:#3b82f6"></i>timelapse</span>
+    </div>
+  </div>
+</body>
+</html>
