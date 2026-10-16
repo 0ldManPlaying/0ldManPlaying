@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Playback Scrubber – Enriched Event Preview UX</title>
+  <style>
+    :root {
+      --bg:#eef2f7; --card:#fff; --ink:#111827; --muted:#6b7280;
+      --timeline:#0f172a; --track:#334155; --record:#2563eb; --buffer:#93c5fd;
+      --chip:#e5e7eb; --chip-active:#1f2937; --chip-active-text:#fff;
+    }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family: Inter, Arial, sans-serif; background:var(--bg); color:var(--ink); }
+    .page { width:min(1140px, calc(100vw - 28px)); margin:22px auto; display:grid; gap:16px; }
+    .card { background:var(--card); border-radius:16px; padding:16px; box-shadow:0 10px 30px rgba(0,0,0,.12); }
+    h1 { margin:0 0 8px; font-size:22px; }
+    .sub { color:var(--muted); font-size:14px; margin-bottom:12px; }
+
+    .toolbar { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+    .chip { border:0; padding:8px 10px; border-radius:999px; background:var(--chip); color:#111827; font-weight:600; font-size:12px; cursor:pointer; }
+    .chip.active { background:var(--chip-active); color:var(--chip-active-text); }
+
+    .layout { display:grid; grid-template-columns: 1fr 320px; gap:14px; }
+
+    .timelineWrap { position:relative; background:var(--timeline); border-radius:14px; min-height:180px; padding-top:20px; overflow:hidden; }
+    .tooltipTop { color:#fff; text-align:center; font-weight:700; font-size:13px; opacity:.95; }
+    .track { position:absolute; left:14px; right:14px; top:92px; height:16px; border-radius:9px; background:var(--track); overflow:hidden; }
+    .record { position:absolute; top:0; bottom:0; background:var(--record); }
+    .buffer { position:absolute; top:0; bottom:0; background:var(--buffer); opacity:.7; }
+
+    .tick {
+      position:absolute; width:18px; margin-left:-9px; bottom:-16px; border-radius:8px; cursor:pointer; display:grid; place-items:end center;
+      padding-bottom:1px; color:#fff; font-size:10px; font-weight:700;
+      border:1px solid rgba(255,255,255,.4);
+    }
+    .tick::before { content:""; position:absolute; width:2px; left:calc(50% - 1px); top:-2px; bottom:4px; border-radius:2px; background:currentColor; }
+    .tick[data-type="motion"] { color:#f59e0b; }
+    .tick[data-type="ai"] { color:#8b5cf6; }
+    .tick[data-type="audio"] { color:#10b981; }
+    .tick[data-type="tamper"] { color:#ef4444; }
+    .tick[data-type="timelapse"] { color:#3b82f6; }
+    .tick.active { background:rgba(255,255,255,.16); }
+
+    .playhead { position:absolute; top:30px; bottom:30px; width:2px; left:56%; background:#fff; }
+    .handle { position:absolute; width:18px; height:18px; border-radius:999px; left:calc(56% - 8px); top:113px; background:#fff; }
+    .footer { margin-top:10px; display:flex; justify-content:space-between; color:#374151; font-size:12px; }
+
+    .previewPanel {
+      background:#0b1220; border-radius:12px; border:1px solid rgba(255,255,255,.12);
+      color:#fff; padding:10px; min-height:280px; display:grid; gap:8px;
+    }
+    .previewPanel img { width:100%; height:160px; object-fit:cover; border-radius:8px; background:#1f2937; }
+    .metaRow { display:flex; justify-content:space-between; gap:8px; font-size:12px; color:#dbeafe; }
+    .metaStrong { color:#fff; font-weight:700; }
+    .actions { display:flex; gap:8px; }
+    .btn { flex:1; border:0; border-radius:8px; padding:8px; cursor:pointer; font-weight:700; font-size:12px; }
+    .btn.primary { background:#2563eb; color:#fff; }
+    .btn.ghost { background:#1f2937; color:#e5e7eb; }
+    .hint { color:#94a3b8; font-size:12px; }
+
+    .zones { margin-top:12px; display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
+    .zone { background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:10px; display:flex; gap:8px; align-items:center; }
+    .icon { width:28px; height:28px; border-radius:8px; display:grid; place-items:center; color:#fff; font-size:16px; }
+    .i-door { background:#ef4444; } .i-garden { background:#22c55e; } .i-driveway { background:#3b82f6; } .i-garage { background:#a855f7; }
+
+    @media (max-width: 940px) { .layout { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <section class="card">
+      <h1>Event Preview (hover/focus/tap) — verrijkte UX</h1>
+      <div class="sub">Meest gebruiksvriendelijk: hover op desktop, focus via keyboard en tap/click om te “pinnen”. Rechterpaneel toont thumbnail, confidence, clip-duur en zone.</div>
+
+      <div class="toolbar" id="filters"></div>
+
+      <div class="layout">
+        <div>
+          <div class="timelineWrap" id="timeline">
+            <div class="tooltipTop">18:42:16 — Hover, Tab of klik op event markers</div>
+            <div class="track" id="track">
+              <div class="record" style="left:4%;width:22%"></div>
+              <div class="record" style="left:29%;width:36%"></div>
+              <div class="record" style="left:70%;width:24%"></div>
+              <div class="buffer" style="left:52%;width:10%"></div>
+            </div>
+            <div class="playhead"></div>
+            <div class="handle"></div>
+          </div>
+          <div class="footer"><span>00:00:00</span><span>18:42:16</span><span>23:59:59</span></div>
+        </div>
+
+        <aside class="previewPanel" id="panel">
+          <img id="panelImg" alt="Event preview image" />
+          <div class="metaRow"><span class="metaStrong" id="panelType">Nog geen event geselecteerd</span><span id="panelTime">--:--:--</span></div>
+          <div class="metaRow"><span id="panelZone">Zone: --</span><span id="panelSeverity">Severity: --</span></div>
+          <div class="metaRow"><span id="panelConfidence">Confidence: --</span><span id="panelClip">Clip: --</span></div>
+          <div class="actions">
+            <button class="btn primary">Seek naar event</button>
+            <button class="btn ghost" id="pinBtn">Pin preview</button>
+          </div>
+          <div class="hint" id="hint">Tip: klik op een marker om deze preview vast te zetten.</div>
+        </aside>
+      </div>
+
+      <div class="zones">
+        <div class="zone"><span class="icon i-door">🚪</span><div><strong>Front Door</strong><br><small>tamper / motion</small></div></div>
+        <div class="zone"><span class="icon i-garden">🌿</span><div><strong>Garden</strong><br><small>motion / timelapse</small></div></div>
+        <div class="zone"><span class="icon i-driveway">🚗</span><div><strong>Driveway</strong><br><small>ai vehicle detect</small></div></div>
+        <div class="zone"><span class="icon i-garage">🛠️</span><div><strong>Garage</strong><br><small>audio / motion</small></div></div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const events = [
+      { id:'e1', type:'motion', time:'16:03:22', zone:'Garden', severity:'S1', confidence:'74%', clip:'08s', icon:'🌿', x:10, img:'https://picsum.photos/seed/motion1/520/280' },
+      { id:'e2', type:'ai', time:'16:18:05', zone:'Driveway', severity:'S2', confidence:'92%', clip:'12s', icon:'🚗', x:21, img:'https://picsum.photos/seed/ai1/520/280' },
+      { id:'e3', type:'tamper', time:'16:49:47', zone:'Front Door', severity:'S3', confidence:'98%', clip:'16s', icon:'🚪', x:38, img:'https://picsum.photos/seed/tamper1/520/280' },
+      { id:'e4', type:'audio', time:'17:12:11', zone:'Garage', severity:'S2', confidence:'67%', clip:'06s', icon:'🛠️', x:56, img:'https://picsum.photos/seed/audio1/520/280' },
+      { id:'e5', type:'timelapse', time:'18:07:40', zone:'Garden', severity:'S1', confidence:'80%', clip:'04s', icon:'🌿', x:77, img:'https://picsum.photos/seed/tl1/520/280' }
+    ];
+
+    const typeOrder = ['all','motion','ai','audio','tamper','timelapse'];
+    const filtersEl = document.getElementById('filters');
+    const trackEl = document.getElementById('track');
+
+    const panel = {
+      img: document.getElementById('panelImg'),
+      type: document.getElementById('panelType'),
+      time: document.getElementById('panelTime'),
+      zone: document.getElementById('panelZone'),
+      severity: document.getElementById('panelSeverity'),
+      confidence: document.getElementById('panelConfidence'),
+      clip: document.getElementById('panelClip'),
+      hint: document.getElementById('hint'),
+      pinBtn: document.getElementById('pinBtn')
+    };
+
+    let activeType = 'all';
+    let pinnedId = null;
+
+    function setPanel(event) {
+      if (!event) return;
+      panel.img.src = event.img;
+      panel.type.textContent = `${event.icon} ${event.type.toUpperCase()}`;
+      panel.time.textContent = event.time;
+      panel.zone.textContent = `Zone: ${event.zone}`;
+      panel.severity.textContent = `Severity: ${event.severity}`;
+      panel.confidence.textContent = `Confidence: ${event.confidence}`;
+      panel.clip.textContent = `Clip: ${event.clip}`;
+      panel.hint.textContent = pinnedId ? `Preview is vastgezet op ${event.id}. Klik opnieuw om te ontpinnen.` : 'Tip: klik op een marker om deze preview vast te zetten.';
+    }
+
+    function renderFilters() {
+      filtersEl.innerHTML = '';
+      typeOrder.forEach((type) => {
+        const btn = document.createElement('button');
+        btn.className = `chip ${activeType === type ? 'active' : ''}`;
+        btn.textContent = type === 'all' ? 'Alle events' : type;
+        btn.onclick = () => { activeType = type; pinnedId = null; render(); };
+        filtersEl.appendChild(btn);
+      });
+    }
+
+    function renderEvents() {
+      [...trackEl.querySelectorAll('.tick')].forEach((el) => el.remove());
+      const visible = events.filter((e) => activeType === 'all' || e.type === activeType);
+      visible.forEach((e) => {
+        const tick = document.createElement('button');
+        tick.className = `tick ${e.id === pinnedId ? 'active' : ''}`;
+        tick.dataset.type = e.type;
+        tick.style.left = `${e.x}%`;
+        tick.style.height = e.severity === 'S3' ? '22px' : e.severity === 'S2' ? '18px' : '14px';
+        tick.textContent = e.icon;
+        tick.setAttribute('aria-label', `${e.type} ${e.time} ${e.zone}`);
+
+        tick.addEventListener('mouseenter', () => { if (!pinnedId) setPanel(e); });
+        tick.addEventListener('focus', () => { if (!pinnedId) setPanel(e); });
+        tick.addEventListener('click', () => {
+          pinnedId = pinnedId === e.id ? null : e.id;
+          setPanel(e);
+          renderEvents();
+        });
+
+        trackEl.appendChild(tick);
+      });
+      if (!visible.length) {
+        panel.type.textContent = 'Geen events in filter';
+        panel.time.textContent = '--:--:--';
+        panel.zone.textContent = 'Zone: --';
+        panel.severity.textContent = 'Severity: --';
+        panel.confidence.textContent = 'Confidence: --';
+        panel.clip.textContent = 'Clip: --';
+      } else if (!pinnedId) {
+        setPanel(visible[0]);
+      }
+    }
+
+    panel.pinBtn.addEventListener('click', () => {
+      if (!pinnedId) {
+        const firstVisible = events.find((e) => activeType === 'all' || e.type === activeType);
+        pinnedId = firstVisible ? firstVisible.id : null;
+      } else {
+        pinnedId = null;
+      }
+      renderEvents();
+    });
+
+    function render() { renderFilters(); renderEvents(); }
+    render();
+  </script>
+</body>
+</html>

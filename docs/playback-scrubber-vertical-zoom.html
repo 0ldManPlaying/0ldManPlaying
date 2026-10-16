@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Vertical Playback Scrubber – Histogram + Deep Zoom</title>
+  <style>
+    :root {
+      --bg:#eef2f7; --card:#fff; --ink:#0f172a; --muted:#64748b;
+      --timeline:#0b1220; --track:#1e293b; --record:#2563eb; --buffer:#93c5fd;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Inter,Arial,sans-serif;background:var(--bg);color:var(--ink)}
+    .page{width:min(1100px,calc(100vw - 28px));margin:24px auto;display:grid;gap:14px}
+    .card{background:var(--card);border-radius:16px;padding:16px;box-shadow:0 12px 30px rgba(0,0,0,.12)}
+    h1{margin:0 0 6px;font-size:22px}
+    .sub{margin:0 0 14px;color:var(--muted);font-size:14px}
+
+    .layout{display:grid;grid-template-columns:130px 1fr 320px;gap:14px;align-items:start}
+    .controls{background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:10px;display:grid;gap:10px}
+    .controls label{font-size:12px;color:#475569;font-weight:700}
+    .zoomValue{font-size:12px;color:#0f172a;font-weight:700}
+    .btn{border:0;border-radius:8px;padding:8px;font-weight:700;cursor:pointer}
+    .btn.dark{background:#1f2937;color:white}
+
+    .timelineWrap{height:760px;border-radius:16px;background:var(--timeline);position:relative;overflow:hidden;padding:10px}
+    .timelineHeader{color:#fff;text-align:center;font-size:12px;font-weight:700;opacity:.95;padding-bottom:8px}
+    .verticalTrack{position:absolute;top:42px;bottom:24px;left:56px;width:22px;background:var(--track);border-radius:12px;overflow:hidden}
+    .record{position:absolute;left:0;right:0;background:var(--record)}
+    .buffer{position:absolute;left:0;right:0;background:var(--buffer);opacity:.8}
+
+    .hist{position:absolute;top:42px;bottom:24px;left:90px;width:120px;display:grid;align-content:stretch}
+    .histBar{height:100%;align-self:stretch;background:rgba(148,163,184,.25);border-bottom:1px solid rgba(255,255,255,.04);display:flex;justify-content:flex-start;align-items:center}
+    .histFill{height:65%;border-radius:0 4px 4px 0;background:linear-gradient(90deg,#60a5fa,#22d3ee)}
+
+    .tickLayer{position:absolute;top:42px;bottom:24px;left:50px;right:10px;pointer-events:none}
+    .tick{position:absolute;left:0;height:2px;width:14px;border-radius:2px;pointer-events:auto;cursor:pointer}
+    .tick.motion{background:#f59e0b}.tick.ai{background:#8b5cf6}.tick.audio{background:#10b981}.tick.tamper{background:#ef4444}.tick.timelapse{background:#3b82f6}
+
+    .playhead{position:absolute;left:44px;right:10px;height:2px;background:#fff;box-shadow:0 0 0 1px rgba(255,255,255,.2)}
+    .handle{position:absolute;left:40px;width:30px;height:12px;background:#fff;border-radius:8px;margin-top:-5px}
+
+    .labels{position:absolute;top:42px;bottom:24px;left:10px;width:40px;color:#cbd5e1;font-size:10px}
+    .label{position:absolute;left:0;transform:translateY(-50%)}
+
+    .panel{background:#0b1220;color:white;border-radius:12px;padding:10px;display:grid;gap:8px;min-height:240px}
+    .panel img{width:100%;height:140px;object-fit:cover;border-radius:8px;background:#1f2937}
+    .meta{display:flex;justify-content:space-between;font-size:12px;color:#dbeafe}
+    .hint{font-size:12px;color:#94a3b8}
+
+    @media (max-width: 980px){.layout{grid-template-columns:1fr}.timelineWrap{height:620px}}
+  </style>
+</head>
+<body>
+  <div class="page">
+    <section class="card">
+      <h1>Verticale Playback Scrubber (14 uur overview → 1 seconde detail)</h1>
+      <p class="sub">Histogram toont event-dichtheid per tijdblok. Zoom van 14 uur overzicht naar 1s detail; bij dieper zoomen verschijnen individuele event ticks.</p>
+
+      <div class="layout">
+        <div class="controls">
+          <label for="zoom">Zoom venster (seconden)</label>
+          <input id="zoom" type="range" min="1" max="50400" value="3600" step="1" />
+          <div class="zoomValue" id="zoomValue">Zoom: 1 uur</div>
+          <button class="btn dark" id="overviewBtn">14 uur overzicht</button>
+          <button class="btn dark" id="detailBtn">1 seconde detail</button>
+        </div>
+
+        <div class="timelineWrap" id="timeline">
+          <div class="timelineHeader" id="headerTxt">Window: 14h tot nu • Histogram per uur</div>
+          <div class="verticalTrack" id="track">
+            <div class="record" style="top:4%;height:28%"></div>
+            <div class="record" style="top:36%;height:32%"></div>
+            <div class="record" style="top:72%;height:22%"></div>
+            <div class="buffer" style="top:58%;height:10%"></div>
+          </div>
+          <div class="hist" id="hist"></div>
+          <div class="tickLayer" id="ticks"></div>
+          <div class="playhead" id="playhead" style="top:58%"></div>
+          <div class="handle" id="handle" style="top:58%"></div>
+          <div class="labels" id="labels"></div>
+        </div>
+
+        <aside class="panel">
+          <img id="previewImg" alt="Event preview" src="https://picsum.photos/seed/defaultPreview/480/240" />
+          <div class="meta"><strong id="previewType">Geen event geselecteerd</strong><span id="previewTime">--:--:--</span></div>
+          <div class="meta"><span id="previewZone">Zone: --</span><span id="previewSeverity">Severity: --</span></div>
+          <div class="meta"><span id="previewCount">Blok events: --</span><span id="previewGran">Granularity: --</span></div>
+          <div class="hint">Tip: klik een histogram balk op lage zoom. Op hoge zoom klik je direct op individuele event ticks met image preview.</div>
+        </aside>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const TOTAL_SECONDS = 14 * 60 * 60;
+    const zoomSlider = document.getElementById('zoom');
+    const zoomValue = document.getElementById('zoomValue');
+    const headerTxt = document.getElementById('headerTxt');
+    const histEl = document.getElementById('hist');
+    const ticksEl = document.getElementById('ticks');
+    const labelsEl = document.getElementById('labels');
+
+    const preview = {
+      img: document.getElementById('previewImg'),
+      type: document.getElementById('previewType'),
+      time: document.getElementById('previewTime'),
+      zone: document.getElementById('previewZone'),
+      severity: document.getElementById('previewSeverity'),
+      count: document.getElementById('previewCount'),
+      gran: document.getElementById('previewGran')
+    };
+
+    // deterministic synthetic event stream over 14h
+    const eventTypes = ['motion','ai','audio','tamper','timelapse'];
+    const zones = ['Front Door','Garden','Driveway','Garage'];
+    const events = Array.from({length:900}, (_, i) => {
+      const sec = Math.floor((i / 900) * TOTAL_SECONDS);
+      return {
+        id:`e${i}`,
+        sec,
+        type:eventTypes[i % eventTypes.length],
+        zone:zones[i % zones.length],
+        severity:['S1','S2','S3'][i % 3],
+        img:`https://picsum.photos/seed/vertical${i}/480/240`
+      };
+    });
+
+    function formatWindow(sec){
+      if (sec < 60) return `${sec} sec`;
+      if (sec < 3600) return `${Math.round(sec/60)} min`;
+      return `${(sec/3600).toFixed(sec % 3600 ? 1 : 0)} uur`;
+    }
+
+    function secToLabel(secFromNow){
+      const hrs = Math.floor(secFromNow / 3600).toString().padStart(2,'0');
+      const mins = Math.floor((secFromNow % 3600)/60).toString().padStart(2,'0');
+      const sec = Math.floor(secFromNow % 60).toString().padStart(2,'0');
+      return `${hrs}:${mins}:${sec}`;
+    }
+
+    function renderLabels() {
+      labelsEl.innerHTML = '';
+      for(let i=0;i<=14;i+=2){
+        const p = (i/14) * 100;
+        const el = document.createElement('div');
+        el.className = 'label';
+        el.style.top = `${p}%`;
+        el.textContent = `${14-i}h`;
+        labelsEl.appendChild(el);
+      }
+    }
+
+    function setPreviewFromEvent(ev, blockCount, gran) {
+      preview.img.src = ev.img;
+      preview.type.textContent = ev.type.toUpperCase();
+      preview.time.textContent = secToLabel(TOTAL_SECONDS - ev.sec);
+      preview.zone.textContent = `Zone: ${ev.zone}`;
+      preview.severity.textContent = `Severity: ${ev.severity}`;
+      preview.count.textContent = `Blok events: ${blockCount}`;
+      preview.gran.textContent = `Granularity: ${gran}`;
+    }
+
+    function renderHistogram(windowSec) {
+      histEl.innerHTML = '';
+      const bucketSec = Math.max(1, Math.round(windowSec));
+      const bucketCount = Math.max(8, Math.min(140, Math.floor(TOTAL_SECONDS / bucketSec)));
+      const buckets = Array.from({length:bucketCount}, () => []);
+
+      for(const ev of events){
+        const idx = Math.min(bucketCount-1, Math.floor((ev.sec / TOTAL_SECONDS) * bucketCount));
+        buckets[idx].push(ev);
+      }
+
+      const max = Math.max(...buckets.map(b => b.length), 1);
+      buckets.forEach((bucket, idx) => {
+        const bar = document.createElement('button');
+        bar.className = 'histBar';
+        bar.style.height = `${100/bucketCount}%`;
+        bar.style.border = '0';
+        bar.style.padding = '0';
+        bar.style.background = 'transparent';
+        bar.style.cursor = 'pointer';
+
+        const fill = document.createElement('div');
+        fill.className = 'histFill';
+        fill.style.width = `${Math.max(4, (bucket.length / max) * 100)}%`;
+        fill.style.opacity = `${0.25 + (bucket.length / max) * 0.75}`;
+
+        bar.appendChild(fill);
+        bar.addEventListener('click', () => {
+          if (!bucket.length) return;
+          const mid = bucket[Math.floor(bucket.length/2)];
+          setPreviewFromEvent(mid, bucket.length, `~${bucketSec}s blok`);
+        });
+        histEl.appendChild(bar);
+      });
+    }
+
+    function renderTicks(windowSec) {
+      ticksEl.innerHTML = '';
+      // show detailed ticks only when <= 1h; dense detail when <= 60s
+      if (windowSec > 3600) return;
+
+      const detailFactor = windowSec <= 60 ? 1 : windowSec <= 600 ? 3 : 8;
+      const filtered = events.filter((_, i) => i % detailFactor === 0);
+
+      for (const ev of filtered) {
+        const t = document.createElement('button');
+        t.className = `tick ${ev.type}`;
+        t.style.top = `${(ev.sec / TOTAL_SECONDS) * 100}%`;
+        t.style.left = `${ev.severity === 'S3' ? 2 : ev.severity === 'S2' ? 6 : 10}px`;
+        t.setAttribute('aria-label', `${ev.type} ${ev.zone}`);
+        t.addEventListener('mouseenter', () => setPreviewFromEvent(ev, 1, 'event-level'));
+        t.addEventListener('click', () => setPreviewFromEvent(ev, 1, 'event-level'));
+        ticksEl.appendChild(t);
+      }
+    }
+
+    function render() {
+      const windowSec = Number(zoomSlider.value);
+      zoomValue.textContent = `Zoom: ${formatWindow(windowSec)}`;
+      headerTxt.textContent = windowSec > 3600
+        ? `Window: 14h overview • Histogram aggregatie (${formatWindow(windowSec)} blokken)`
+        : `Window: detail modus (${formatWindow(windowSec)}) • individuele events zichtbaar`;
+      renderHistogram(windowSec);
+      renderTicks(windowSec);
+    }
+
+    document.getElementById('overviewBtn').onclick = () => { zoomSlider.value = String(TOTAL_SECONDS); render(); };
+    document.getElementById('detailBtn').onclick = () => { zoomSlider.value = '1'; render(); };
+    zoomSlider.addEventListener('input', render);
+
+    renderLabels();
+    render();
+  </script>
+</body>
+</html>
